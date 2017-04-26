@@ -60,8 +60,12 @@ def choose_language(address, languages):
 
 def choose_level(users):
     """ Chooses the level for this week based on a hash of the date """
+    all_levels = [level
+                  for levels in users.values()
+                  for (level, languages) in levels.items()
+                  for _ in languages]
     random.seed(get_date())
-    return choose(["Easy", "Intermediate"])
+    return choose(all_levels)
 
 def choose(elems):
     """ Chooses a single element of the given list. """
@@ -94,26 +98,30 @@ def send_message(address, yag, level, language, post):
     # if address == "tobinyehle@gmail.com":
     #     print(subject)
     #     print(message)
-    yag.send(to=address, subject=subject, contents=message)
+    # yag.send(to=address, subject=subject, contents=message)
 
 def main():
     """ Main function to run if this file is run as a script """
     reddit = init_reddit()
     if reddit is None:
         print("No reddit instance")
-    else:
-        with init_yag() as yag:
-            levels = latest(reddit)
-            if levels is None:
-                print("Could not retrieve challenges")
-            else:
-                with open("users.json", "r") as user_file:
-                    users = json.load(user_file)
-                    if users is None:
-                        print("Could not read user file")
-                    else:
-                        send_messages(users, yag, levels)
-                        print("Messages sent")
+        return 1
+
+    with init_yag() as yag:
+        levels = latest(reddit)
+        if levels is None:
+            print("Could not retrieve challenges")
+            return 2
+
+        with open("users.json", "r") as user_file:
+            users = json.load(user_file)
+            if users is None:
+                print("Could not read user file")
+                return 3
+
+            send_messages(users, yag, levels)
+            print("Messages sent")
+            return 0
 
 if __name__ == "__main__":
-    main()
+    exit(main())
