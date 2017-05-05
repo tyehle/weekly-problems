@@ -5,7 +5,7 @@ import json
 import random
 import time
 
-from typing import List, Dict, Optional, Callable, Iterable, TypeVar
+from typing import List, Dict, Optional, Callable, Iterable, TypeVar, Iterator
 
 import praw
 import yagmail
@@ -14,9 +14,10 @@ VERSION = "v0.1"
 ID = "dailyprogrammer-scraper"
 AUTHOR = "/u/ToboRoboLoco"
 
-# Yag = yagmail.yagmail.SMTP
-# Reddit = praw.reddit.Reddit
-# Post = praw.models.reddit.submission.Submission
+# Yag = yagmail.SMTP
+Reddit = praw.Reddit
+Post = praw.models.reddit.submission.Submission
+Users = Dict[str, Dict[str, List[str]]]
 A = TypeVar("A")
 B = TypeVar("B")
 
@@ -24,7 +25,7 @@ def user_agent() -> str:
     """ Build the user agent string """
     return "{}:{}:{} by {}".format(sys.platform, ID, VERSION, AUTHOR)
 
-def init_reddit() -> Optional[praw.reddit.Reddit]:
+def init_reddit() -> Optional[Reddit]:
     """ Gets a praw reddit instance """
     client_info = None
     with open("client-info.json", mode='r') as info_handle:
@@ -38,7 +39,7 @@ def init_reddit() -> Optional[praw.reddit.Reddit]:
     else:
         return praw.Reddit(user_agent=user_agent(), **client_info)
 
-def init_yag() -> yagmail.yagmail.SMTP:
+def init_yag() -> yagmail.SMTP:
     """ Gets a yagmail instance for sending emails. """
     yag = yagmail.SMTP("tobin.spam@gmail.com")
     yag.useralias = "robotobo@tobinyehle.com"
@@ -59,19 +60,21 @@ def group_by(iterable: Iterable[A], key_func: Callable[[A], B]) -> Dict[B, List[
             out[key] = [item]
     return out
 
-def latest(reddit: praw.reddit.Reddit) -> Optional[Dict[str, praw.models.reddit.submission.Submission]]:
+def latest(reddit: Reddit) -> Optional[Dict[str, Post]]:
     """ Get the latest posts """
+    def get_number(post: Post) -> str:
+        return post.title.split()[2][1:]
+
     posts = list(reddit.subreddit('dailyprogrammer').new(limit=5))
-    grouped = group_by(posts, lambda post: post.title.split()[2][1:])
-    only3 = filter(lambda posts: len(posts) == 3, grouped.values())
-    result = max(only3,
-                 key=lambda posts: int(posts[0].title.split()[2][1:]),
-                 default=[])
-    if len(result) != 3:
+    grouped = group_by(posts, get_number)
+    full = [posts for posts in grouped.values() if len(posts) == 3]
+
+    if len(full) == 0:
         print("Could not get matching challenges from: {}".format([post.title for post in posts]))
         return None
     else:
-        levels = {post.title.split()[3][1:-1] : post for post in posts}
+        result = max(full, key=lambda posts: int(get_number(posts[0])))
+        levels = {post.title.split()[3][1:-1] : post for post in result}
         return levels
 
 def choose_language(address: str, languages: List[str]) -> str:
@@ -81,7 +84,7 @@ def choose_language(address: str, languages: List[str]) -> str:
     random.seed(address + get_date())
     return choose(languages)
 
-def choose_level(users: Dict[str, Dict[str, List[str]]]) -> str:
+def choose_level(users: Users) -> str:
     """ Chooses the level for this week based on a hash of the date """
     all_levels = [level
                   for levels in users.values()
@@ -94,7 +97,7 @@ def choose(elems: List[A]) -> A:
     """ Chooses a single element of the given list. """
     return elems[random.randrange(len(elems))]
 
-def send_messages(users: Dict[str, Dict[str, List[str]]], yag: yagmail.yagmail.SMTP, levels: Dict[str, praw.models.reddit.submission.Submission]) -> None:
+def send_messages(users: Users, yag: yagmail.SMTP, levels: Dict[str, Post]) -> None:
     """ Send out messages to all the users. """
     level = choose_level(users)
     for (address, languages) in users.items():
@@ -105,7 +108,7 @@ def send_messages(users: Dict[str, Dict[str, List[str]]], yag: yagmail.yagmail.S
             lang = choose_language(address, languages[level])
         send_message(address, yag, level, lang, levels[level])
 
-def send_message(address: str, yag: yagmail.yagmail.SMTP, level: str, language: str, post: praw.models.reddit.submission.Submission) -> None:
+def send_message(address: str, yag: yagmail.SMTP, level: str, language: str, post: Post) -> None:
     """ Sends the user a message containing the problem in the given post. """
     title = post.title.split(']')[-1].strip()
     date = get_date()
@@ -145,7 +148,7 @@ def main() -> int:
             return 2
 
         with open("users.json", "r") as user_file:
-            users = json.load(user_file)
+            users = json.load(user_file) # type: Users
             if users is None:
                 print("Could not read user file")
                 return 3
