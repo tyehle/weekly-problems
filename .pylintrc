@@ -1,0 +1,6 @@
+[MESSAGES CONTROL]
+disable=I0011
+
+[REPORTS]
+output-format=colorized
+reports=no

@@ -4,15 +4,17 @@ import os
 import json
 import argparse
 import datetime
+from typing import Optional, Union, cast, List
 
 import base64
 import email
 from email.mime.text import MIMEText
 import httplib2
 from apiclient import discovery
-from oauth2client import client
-from oauth2client import tools
+from oauth2client import client, tools
 from oauth2client.file import Storage
+
+from result import Result, Ok, Err
 
 # If modifying these scopes, delete your previously saved credentials
 # at ~/.credentials/gmail-python.json
@@ -46,6 +48,13 @@ def get_credentials(flags):
         print('Storing credentials to ' + credential_path)
     return credentials
 
+def init_service():
+    """ Builds the gmail service. """
+    flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
+    credentials = get_credentials(flags)
+    http = credentials.authorize(httplib2.Http())
+    return discovery.build('gmail', 'v1', http=http)
+
 def get_message(service, user_id, msg_id):
     """ Gets a message using the given client. """
     result = service.users().messages().get(userId=user_id,
@@ -54,22 +63,28 @@ def get_message(service, user_id, msg_id):
     msg_str = base64.urlsafe_b64decode(result["raw"].encode("ASCII"))
     return email.message_from_bytes(msg_str)
 
-def get_text_content(msg):
+def get_text_content(msg: Union[email.message.Message, MIMEText]) -> Result[str, str]:
     """ Gets the plain text content of a MIME message if it exists.
         If there is no plain text content then the result is None.
     """
     if msg.get_content_type() == "text/plain":
-        return msg.get_payload(decode=True).decode(msg.get_content_charset())
+        payload = cast(bytes, msg.get_payload(decode=True))
+        return Ok(payload.decode(msg.get_content_charset()))
     elif msg.get_content_type() == "multipart/alternative":
-        for part in msg.get_payload():
+        for part in cast(List[email.message.Message], msg.get_payload()):
             content = get_text_content(part)
-            if content is not None:
+            if content.is_ok:
                 return content
-        return None
+        return Err("No text/plain alternative found")
     else:
-        return None
+        return Err("Unknown content type: {}".format(msg.get_content_type()))
 
-def make_message(body, subject, recipient, sender, alias=None, **other_headers):
+def make_message(body: str,
+                 subject: str,
+                 recipient: str,
+                 sender: str,
+                 alias: Optional[str]=None,
+                 **other_headers: str) -> MIMEText:
     """ Builds a raw mime message from the given information. """
     message = MIMEText(body)
     message["Subject"] = subject
@@ -102,42 +117,54 @@ def list_messages(service, user_id, labels="INBOX"):
     """
     return service.users().messages().list(userId=user_id, labelIds=labels).execute()
 
-def quote(message):
+def quote(message: MIMEText) -> Result[str, str]:
     """ Quote the text from a message for a reply. """
+    if message["Date"] is None:
+        return Err("Message has no Date header")
+
     date = datetime.datetime.strptime(message["Date"], "%a, %d %b %Y %X %z")
-    date_string = date.strftime("%a, %b %d, %Y at %I:%M %p")
+    date_prefix = date.strftime("%a, %b %d, %Y at %I:%M %p")
 
     content = get_text_content(message)
-    quoted = "\r\n".join("> " + line for line in content.split("\r\n"))
 
-    return "On {} {} wrote:\r\n\r\n{}\r\n".format(date_string, message["From"], quoted)
+    def from_content(content_str: str) -> str: # pylint: disable=C0111
+        quoted = "\r\n".join("> " + line for line in content_str.split("\r\n"))
+        return "On {} {} wrote:\r\n\r\n{}\r\n".format(date_prefix, message["From"], quoted)
 
-def make_reply(message, body, alias=None):
+    return content.mapOk(from_content)
+
+def make_reply(message: MIMEText, body: str, alias: Optional[str]=None) -> Result[str, MIMEText]:
     """ Create a message in reply to another message. """
+    recipient = message.get("Reply-To", failobj=message["From"])
+    message_id = message["Message-ID"]
     orig_subject = message["Subject"]
+
+    # make sure we have the required fields
+    if recipient is None:
+        return Err("Message has no From or Reply-To header")
+    if message_id is None:
+        return Err("Message has no Message-ID header")
+    if orig_subject is None:
+        return Err("Message has no Subject header")
+
     subject = orig_subject if "Re: " in orig_subject else "Re: " + orig_subject
 
-    refs = message.get("References", failobj="") + " " + message["Message-ID"]
+    refs = message.get("References", failobj="") + " " + message_id
     refs = refs.strip() # remove the leading space if the get failed
 
-    recipient = message.get("Reply-To", failobj=message["From"])
+    return Ok(make_message(body="{}\r\n\r\n{}".format(body, quote(message)),
+                           subject=subject,
+                           recipient=recipient,
+                           sender="tobin.spam@gmail.com",
+                           alias=alias,
+                           **{"In-Reply-To": message_id,
+                              "References": refs}))
 
-    return make_message(body="{}\r\n\r\n{}".format(body, quote(message)),
-                        subject=subject,
-                        recipient=recipient,
-                        sender="tobin.spam@gmail.com",
-                        alias=alias,
-                        **{"In-Reply-To": message["Message-ID"],
-                           "References": refs})
-
-def main():
+def main() -> None:
     """ Creates a Gmail API service object and outputs a list of label names
         of the user's Gmail account.
     """
-    flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
-    credentials = get_credentials(flags)
-    http = credentials.authorize(httplib2.Http())
-    service = discovery.build('gmail', 'v1', http=http)
+    service = init_service()
 
     out = make_message(body="Hey look I changed my picture!",
                        subject="Test Message",
