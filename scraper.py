@@ -5,7 +5,7 @@ import json
 import random
 import time
 
-from typing import List, Dict, Optional, Callable, Iterable, TypeVar, Iterator
+from typing import List, Dict, Optional, Callable, Iterable, TypeVar
 
 import praw
 import yagmail
@@ -13,6 +13,8 @@ import yagmail
 VERSION = "v0.1"
 ID = "dailyprogrammer-scraper"
 AUTHOR = "/u/ToboRoboLoco"
+
+# pylint: disable=C0103
 
 # Yag = yagmail.SMTP
 Reddit = praw.Reddit
@@ -62,7 +64,7 @@ def group_by(iterable: Iterable[A], key_func: Callable[[A], B]) -> Dict[B, List[
 
 def latest(reddit: Reddit) -> Optional[Dict[str, Post]]:
     """ Get the latest posts """
-    def get_number(post: Post) -> str:
+    def get_number(post: Post) -> str: # pylint: disable=C0111
         return post.title.split()[2][1:]
 
     posts = list(reddit.subreddit('dailyprogrammer').new(limit=5))
@@ -113,26 +115,31 @@ def send_message(address: str, yag: yagmail.SMTP, level: str, language: str, pos
     title = post.title.split(']')[-1].strip()
     date = get_date()
     subject = "[Weekly Programming Problem] {} in {}".format(title, language)
-    push_instructions = ("To push your code to the studio repo "+
-                         "(https://github.com/tyehle/programming-studio) put "+
+    repo_url = "https://github.com/tyehle/programming-studio"
+    push_instructions = ("To push your code to the <a href={url}>studio repo</a> put "+
                          "it in this week's folder in a folder with your name "+
                          "(ie: {date}/tobin/*.py), or as a single file with "+
                          "your name in it (ie: {date}/tobin_code.py)."
-                        ).format(date=date)
-    message = """This week you will be doing the {} {} problem in {}!
-                 {}
+                        ).format(date=date, url=repo_url)
+    message = """This week you will be doing the {level}
+                 <a href=https://www.reddit.com{link}>{title}</a> problem in
+                 {language}!<br><br>
 
-                 This problem's source is {}.
+                 {repo}<br><br>
 
-                 {}
-                 """.format(level, title, language,
-                            push_instructions,
-                            post.shortlink, post.selftext_html)
+                 {spec}
+                 """.format(level=level,
+                            title=title,
+                            language=language,
+                            repo=push_instructions,
+                            link=post.permalink,
+                            spec=post.selftext_html)
+    without_newlines = message.replace("\n", "")
     print("Sending ({}, {}) to {}".format(level, language, address))
-    # if address == "tobinyehle@gmail.com":
-    #     print(subject)
-    #     print(message)
-    yag.send(to=address, subject=subject, contents=message)
+    if address == "tobinyehle@gmail.com":
+        print(subject)
+        print(without_newlines)
+        yag.send(to=address, subject=subject, contents=without_newlines)
 
 def main() -> int:
     """ Main function to run if this file is run as a script """

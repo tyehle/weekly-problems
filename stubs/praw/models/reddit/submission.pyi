@@ -5,3 +5,4 @@ class Submission:
     # These are added by calling setattr on everything in _data in RedditBase
     title = ... # type: str
     selftext_html = ... # type: str
+    permalink = ... # type: str
