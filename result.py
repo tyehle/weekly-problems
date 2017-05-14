@@ -5,7 +5,6 @@ from typing import TypeVar, Generic, Callable, Union, Any, cast
 E = TypeVar("E")
 T = TypeVar("T")
 A = TypeVar("A")
-Ex = TypeVar("Ex") # pylint: disable=C0103
 
 class Result(Generic[E, T]):
     """ Result super class. Do NOT construct an instance of this by hand.
