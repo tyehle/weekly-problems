@@ -1,10 +1,11 @@
-""" A result type like in rust """
+""" A result type like in rust. """
 
-from typing import TypeVar, Generic, Callable, Union, cast
+from typing import TypeVar, Generic, Callable, Union, Any, cast
 
 E = TypeVar("E")
 T = TypeVar("T")
 A = TypeVar("A")
+Ex = TypeVar("Ex") # pylint: disable=C0103
 
 class Result(Generic[E, T]):
     """ Result super class. Do NOT construct an instance of this by hand.
@@ -16,22 +17,61 @@ class Result(Generic[E, T]):
         self.is_err = not is_ok
 
     def extract(self, err_func: Callable[[E], A], ok_func: Callable[[T], A]) -> A:
-        """ Map both values to a single type. """
+        """Map both values to a single type. """
         if self.is_ok:
             return ok_func(cast(T, self._value))
         else:
             return err_func(cast(E, self._value))
 
-    def map_err(self, func: Callable[[E], A]) -> Result[A, T]:
-        return self.extract(lambda err: Err(func(err)), Ok)
-
-    def map_ok(self, func: Callable[[T], A]) -> Result [E, A]:
+    def fmap(self, func: Callable[[T], A]) -> Result[E, A]:
+        """ Functor map maps ok values, and leaves err values as is. """
         return self.extract(Err, lambda ok: Ok(func(ok)))
 
-class Ok(Result[E, T]):
-    def __init__(self, value: T) -> None:
-        super(True, value)
+    def bind(self, cont: Callable[[T], "Result[E, A]"]) -> "Result[E, A]":
+        """ Chains another failing computation onto this one. """
+        return self.extract(Err, cont)
 
-class Err(Result[E, T]):
+    def __add__(self, cont: Callable[[T], "Result[E, A]"]) -> "Result[E, A]":
+        """ A Synonym for bind. """
+        return self.bind(cont)
+
+    def map_err(self, func: Callable[[E], A]) -> "Result[A, T]":
+        """ Maps an err value and leaves an ok value as is. """
+        return self.extract(lambda err: Err(func(err)), Ok)
+
+    def map_ok(self, func: Callable[[T], A]) -> "Result[E, A]":
+        """ Maps an ok value and leaves an err value as is. """
+        return self.fmap(func)
+
+def from_exception(func: Callable[..., A],
+                   ex: Any,
+                   mapping: Callable[[Any], E]) -> Callable[..., Result[E, A]]:
+    """ Makes a version of the given function that returns a result type
+        instead of throwing the given exception.
+    """
+    def inner(*args: Any, **kwargs: Any) -> Result[E, A]: # pylint: disable=C0111
+        try:
+            return Ok(func(*args, **kwargs))
+        except ex as failure:
+            return Err(mapping(failure))
+    return inner
+
+def pure(value: T) -> Result[E, T]:
+    """ Puts a regular value into a result context. Synonym of Ok. """
+    return Ok(value)
+
+class Ok(Result[E, T]): # pylint: disable=R0903
+    """ A result representing success. """
+    def __init__(self, value: T) -> None:
+        super().__init__(True, value)
+
+    def __repr__(self) -> str:
+        return "Ok({})".format(repr(self._value))
+
+class Err(Result[E, T]): # pylint: disable=R0903
+    """ A result representing failure. """
     def __init__(self, value: E) -> None:
-        super(False, value)
+        super().__init__(False, value)
+
+    def __repr__(self) -> str:
+        return "Err({})".format(repr(self._value))
