@@ -1,6 +1,6 @@
 """ A result type like in rust. """
 
-from typing import TypeVar, Generic, Callable, Union, Any, cast
+from typing import TypeVar, Generic, Callable, Union, Any, List, Iterable, cast
 
 E = TypeVar("E")
 T = TypeVar("T")
@@ -22,7 +22,7 @@ class Result(Generic[E, T]):
         else:
             return err_func(cast(E, self._value))
 
-    def fmap(self, func: Callable[[T], A]) -> Result[E, A]:
+    def fmap(self, func: Callable[[T], A]) -> "Result[E, A]":
         """ Functor map maps ok values, and leaves err values as is. """
         return self.extract(Err, lambda ok: Ok(func(ok)))
 
@@ -55,9 +55,25 @@ def from_exception(func: Callable[..., A],
             return Err(mapping(failure))
     return inner
 
+def lift(func: Callable[[A], T]) -> Callable[[A], Result[E, T]]:
+    """ Lift a regular function to return a result. """
+    return lambda arg: Ok(func(arg))
+    def inner(arg: A) -> Result[E, T]:
+        return Ok(func(arg))
+    return inner
+
 def pure(value: T) -> Result[E, T]:
     """ Puts a regular value into a result context. Synonym of Ok. """
     return Ok(value)
+
+def map_m(func: Callable[[A], Result[E, T]], items: Iterable[A]) -> Result[E, List[T]]:
+    """ Iterate over some input, returning a list of good results, or the first
+        failure.
+    """
+    out = pure([]) # type: Result[E, List[T]]
+    for item in items:
+        out = out.bind(lambda done: func(item).fmap(lambda mapped: done + [mapped]))
+    return out
 
 class Ok(Result[E, T]): # pylint: disable=R0903
     """ A result representing success. """
