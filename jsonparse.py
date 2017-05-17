@@ -12,7 +12,7 @@ A = TypeVar("A")
 # Generic type aliases need the new typing module
 Parser = Callable[[Any], Result[str, A]]
 
-def run_parser(raw: str, parser: Callable[[Any], Result[str, A]]) -> Result[str, A]:
+def run_parser(raw: str, parser: "Parser[A]") -> Result[str, A]:
     """ Run a parser on some raw string. """
     try:
         data = json.loads(raw)
