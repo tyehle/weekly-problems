@@ -1,16 +1,15 @@
 """ Gets the weekly challenge from reddit.com/r/dailyprogrammer """
 
 import sys
-import json
 import random
 import time
-from typing import List, Dict, Optional, Callable, Iterable, Any, TypeVar
+from typing import List, Dict, Callable, Iterable, Any, TypeVar
 
 import praw
 
 from mail import send, make_html_message
 from result import Result, Err, Ok
-from jsonparse import run_parser_file, dict_parser, list_parser, str_parser
+from jsonparse import run_parser_file, dict_parser, str_parser
 
 VERSION = "v0.1"
 ID = "dailyprogrammer-scraper"

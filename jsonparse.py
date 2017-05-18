@@ -13,6 +13,7 @@ A = TypeVar("A")
 Parser = Callable[[Any], Result[str, A]]
 
 def run_parser_file(filename: str, parser: "Parser[A]") -> Result[str, A]:
+    """ Run a parser on the contents of a file. """
     try:
         with open(filename, mode="r") as handle:
             raw = handle.read()
