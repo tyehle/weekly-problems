@@ -12,6 +12,14 @@ A = TypeVar("A")
 # Generic type aliases need the new typing module
 Parser = Callable[[Any], Result[str, A]]
 
+def run_parser_file(filename: str, parser: "Parser[A]") -> Result[str, A]:
+    try:
+        with open(filename, mode="r") as handle:
+            raw = handle.read()
+            return run_parser(raw, parser)
+    except OSError as exn:
+        return Err(str(exn))
+
 def run_parser(raw: str, parser: "Parser[A]") -> Result[str, A]:
     """ Run a parser on some raw string. """
     try:

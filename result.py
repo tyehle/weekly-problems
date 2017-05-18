@@ -42,18 +42,18 @@ class Result(Generic[E, T]):
         """ Maps an ok value and leaves an err value as is. """
         return self.fmap(func)
 
-def from_exception(func: Callable[..., A],
-                   ex: Any,
-                   mapping: Callable[[Any], E]) -> Callable[..., Result[E, A]]:
-    """ Makes a version of the given function that returns a result type
-        instead of throwing the given exception.
-    """
-    def inner(*args: Any, **kwargs: Any) -> Result[E, A]: # pylint: disable=C0111
-        try:
-            return Ok(func(*args, **kwargs))
-        except ex as failure:
-            return Err(mapping(failure))
-    return inner
+# def from_exception(func: Callable[..., A],
+#                    ex: Any,
+#                    mapping: Callable[[Any], E]) -> Callable[..., Result[E, A]]:
+#     """ Makes a version of the given function that returns a result type
+#         instead of throwing the given exception.
+#     """
+#     def inner(*args: Any, **kwargs: Any) -> Result[E, A]: # pylint: disable=C0111
+#         try:
+#             return Ok(func(*args, **kwargs))
+#         except ex as failure:
+#             return Err(mapping(failure))
+#     return inner
 
 def lift(func: Callable[[A], T]) -> Callable[[A], Result[E, T]]:
     """ Lift a regular function to return a result. """

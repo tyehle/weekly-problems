@@ -4,11 +4,13 @@ import sys
 import json
 import random
 import time
-
-from typing import List, Dict, Optional, Callable, Iterable, TypeVar
+from typing import List, Dict, Optional, Callable, Iterable, Any, TypeVar
 
 import praw
-import yagmail
+
+from mail import send, make_html_message
+from result import Result, Err, Ok
+from jsonparse import run_parser_file, dict_parser, list_parser, str_parser
 
 VERSION = "v0.1"
 ID = "dailyprogrammer-scraper"
@@ -27,25 +29,10 @@ def user_agent() -> str:
     """ Build the user agent string """
     return "{}:{}:{} by {}".format(sys.platform, ID, VERSION, AUTHOR)
 
-def init_reddit() -> Optional[Reddit]:
+def init_reddit() -> Result[str, Reddit]:
     """ Gets a praw reddit instance """
-    client_info = None
-    with open("client-info.json", mode='r') as info_handle:
-        client_info = json.load(info_handle)
-
-    # why is error handling so silly
-
-    if client_info is None:
-        print("No client-info.json file found")
-        return None
-    else:
-        return praw.Reddit(user_agent=user_agent(), **client_info)
-
-def init_yag() -> yagmail.SMTP:
-    """ Gets a yagmail instance for sending emails. """
-    yag = yagmail.SMTP("tobin.spam@gmail.com")
-    yag.useralias = "robotobo@tobinyehle.com"
-    return yag
+    client = run_parser_file("client-info.json", dict_parser(str_parser))
+    return client.fmap(lambda c: praw.Reddit(user_agent=user_agent(), **c))
 
 def get_date() -> str:
     """ Gets the current date in the ISO format. """
@@ -62,7 +49,7 @@ def group_by(iterable: Iterable[A], key_func: Callable[[A], B]) -> Dict[B, List[
             out[key] = [item]
     return out
 
-def latest(reddit: Reddit) -> Optional[Dict[str, Post]]:
+def latest(reddit: Reddit) -> Result[str, Dict[str, Post]]:
     """ Get the latest posts """
     def get_number(post: Post) -> str: # pylint: disable=C0111
         return post.title.split()[2][1:]
@@ -71,13 +58,13 @@ def latest(reddit: Reddit) -> Optional[Dict[str, Post]]:
     grouped = group_by(posts, get_number)
     full = [posts for posts in grouped.values() if len(posts) == 3]
 
-    if len(full) == 0:
-        print("Could not get matching challenges from: {}".format([post.title for post in posts]))
-        return None
+    if empty(full):
+        titles = [post.title for post in posts]
+        return Err("Could not get matching challenges from: {}".format(titles))
     else:
         result = max(full, key=lambda posts: int(get_number(posts[0])))
         levels = {post.title.split()[3][1:-1] : post for post in result}
-        return levels
+        return Ok(levels)
 
 def choose_language(address: str, languages: List[str]) -> str:
     """ Chooses the language for this user.
@@ -99,18 +86,22 @@ def choose(elems: List[A]) -> A:
     """ Chooses a single element of the given list. """
     return elems[random.randrange(len(elems))]
 
-def send_messages(users: Users, yag: yagmail.SMTP, levels: Dict[str, Post]) -> None:
+def empty(xs: Iterable[A]) -> bool:
+    """ Tests if an iterable is empty. """
+    return not bool(xs)
+
+def send_messages(users: Users, service: Any, levels: Dict[str, Post]) -> None:
     """ Send out messages to all the users. """
     level = choose_level(users)
     for (address, languages) in users.items():
         lang = None
-        if len(languages[level]) == 0:
+        if empty(languages[level]):
             lang = "a language of your choice"
         else:
             lang = choose_language(address, languages[level])
-        send_message(address, yag, level, lang, levels[level])
+        send_message(address, service, level, lang, levels[level])
 
-def send_message(address: str, yag: yagmail.SMTP, level: str, language: str, post: Post) -> None:
+def send_message(address: str, service: Any, level: str, language: str, post: Post) -> None:
     """ Sends the user a message containing the problem in the given post. """
     title = post.title.split(']')[-1].strip()
     date = get_date()
@@ -139,30 +130,6 @@ def send_message(address: str, yag: yagmail.SMTP, level: str, language: str, pos
     if address == "tobinyehle@gmail.com":
         print(subject)
         print(without_newlines)
-        yag.send(to=address, subject=subject, contents=without_newlines)
-
-def main() -> int:
-    """ Main function to run if this file is run as a script """
-    reddit = init_reddit()
-    if reddit is None:
-        print("No reddit instance")
-        return 1
-
-    with init_yag() as yag:
-        levels = latest(reddit)
-        if levels is None:
-            print("Could not retrieve challenges")
-            return 2
-
-        with open("users.json", "r") as user_file:
-            users = json.load(user_file) # type: Users
-            if users is None:
-                print("Could not read user file")
-                return 3
-
-            send_messages(users, yag, levels)
-            print("Messages sent")
-            return 0
-
-if __name__ == "__main__":
-    exit(main())
+        send(service, "me", make_html_message(body=message,
+                                              subject=subject,
+                                              recipient=address))
