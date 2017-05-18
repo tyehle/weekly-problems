@@ -125,11 +125,11 @@ def send_message(address: str, service: Any, level: str, language: str, post: Po
                             repo=push_instructions,
                             link=post.permalink,
                             spec=post.selftext_html)
-    without_newlines = message.replace("\n", "")
-    print("Sending ({}, {}) to {}".format(level, language, address))
-    if address == "tobinyehle@gmail.com":
-        print(subject)
-        print(without_newlines)
-        send(service, "me", make_html_message(body=message,
-                                              subject=subject,
-                                              recipient=address))
+    # print("Sending ({}, {}) to {}".format(level, language, address))
+    # if address == "tobinyehle@gmail.com":
+    #     print(subject)
+    #     without_newlines = message.replace("\n", "")
+    #     print(without_newlines)
+    send(service, "me", make_html_message(body=message,
+                                          subject=subject,
+                                          recipient=address))
