@@ -175,7 +175,9 @@ def make_reply(message: Message, body: str) -> Result[str, MIMEText]:
     refs = message.get("References", failobj="") + " " + message_id
     refs = refs.strip() # remove the leading space if the get failed
 
-    return Ok(make_message(body="{}\r\n\r\n{}".format(body, quote(message)),
+    quoted = quote(message).extract(lambda _: "", lambda q: q)
+
+    return Ok(make_message(body="{}\r\n\r\n{}".format(body, quoted),
                            subject=subject,
                            recipient=recipient,
                            **{"In-Reply-To": message_id,

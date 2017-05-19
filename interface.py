@@ -7,7 +7,7 @@ import json
 
 from result import Result, Err, Ok
 import mail
-from jsonparse import run_parser, dict_parser, list_parser, str_parser
+from jsonparse import run_parser, run_parser_file, dict_parser, list_parser, str_parser
 
 # pylint: disable=C0103
 
@@ -34,7 +34,7 @@ def parse_langs(raw: str) -> Result[str, Langs]:
 def add(base: Langs, langs: Langs) -> None:
     """ Adds the languages to the given dictionary. """
     for level in LEVELS:
-        for lang in langs[level]:
+        for lang in langs.get(level, []):
             if lang not in base[level]:
                 base[level].append(lang)
 
@@ -104,7 +104,7 @@ def sub(users: Users, message: Message) -> Result[str, MIMEText]:
     reply = data.extract(("Could not parse json. Failed with {}. You have " +
                           "been subscribed with no languages set.").format,
                          lambda _: "Languages have been set to\r\n{}".format(
-                             json.dumps(langs, indent=2)))
+                             json.dumps(langs, indent=4)))
 
     return mail.make_reply(message, reply)
 
@@ -116,7 +116,7 @@ def unsub(users: Users, message: Message, address: str) -> Result[str, MIMEText]
 def get_langs(users: Users, message: Message, address: str) -> Result[str, MIMEText]:
     """ Gets the languages listed for the sender. """
     reply = "Langues for {}:\n{}".format(address,
-                                         json.dumps(users[address], indent=2))
+                                         json.dumps(users[address], indent=4))
     return mail.make_reply(message, reply)
 
 def set_langs(users: Users, message: Message, address: str) -> Result[str, MIMEText]:
@@ -125,7 +125,7 @@ def set_langs(users: Users, message: Message, address: str) -> Result[str, MIMET
 
     def set_and_reply(ls: Langs) -> Result[str, MIMEText]: # pylint: disable=C0111
         users[address] = ls
-        reply = "Languages for {} have been set to\n{}".format(address, ls)
+        reply = "Languages for {} have been set to\n{}".format(address, json.dumps(ls, indent=4))
         return mail.make_reply(message, reply)
 
     return langs.extract(lambda err: mail.make_reply(message, err), set_and_reply)
@@ -137,7 +137,7 @@ def add_langs(users: Users, message: Message, address: str) -> Result[str, MIMET
                  .fmap(lambda langs: add(users[address], langs)) # type: Result[str, None]
 
     good_text = "Language update successful. Languages are now\n{}".format(
-        json.dumps(users[address], indent=2))
+        json.dumps(users[address], indent=4))
     reply = result.extract(lambda err: err, lambda _: good_text)
 
     return mail.make_reply(message, reply)
@@ -149,7 +149,49 @@ def remove_langs(users: Users, message: Message, address: str) -> Result[str, MI
                  .fmap(lambda langs: remove(users[address], langs)) # type: Result[str, None]
 
     good_text = "Language update successful. Languages are now\n{}".format(
-        json.dumps(users[address], indent=2))
+        json.dumps(users[address], indent=4))
     reply = result.extract(lambda err: err, lambda _: good_text)
 
     return mail.make_reply(message, reply)
+
+def respond_to_all(service: Any, users: Users) -> None:
+    """ Responds to all messages in the inbox. """
+    def reply_and_trash(message_data: Dict[str, str], reply: MIMEText) -> None:
+        """ Send a reply, then trash the original message. """
+        mail.send(service, "me", reply, message_data["threadId"])
+        mail.trash(service, "me", message_data["id"])
+
+    # without this definition mypy cannot infer the type of extract
+    def fail_mail(err: str) -> None: # pylint: disable=C0111
+        notify_failure(service, err)
+
+    for message_data in mail.list_messages(service, "me").get("messages", []):
+        message = mail.get_message(service, "me", message_data["id"])
+        response = react(users, message) # type: Result[str, MIMEText]
+        response.extract(fail_mail,
+                         lambda reply: reply_and_trash(message_data, reply))
+
+    json.dump(users, open("users.json", 'w'), indent=4)
+
+def notify_failure(service: Any, err: str) -> None:
+    """ Send an email indicating a failure. """
+    message = mail.make_message(body=err,
+                                subject="FAILURE",
+                                recipient="tobinyehle@gmail.com")
+    mail.send(service, "me", message)
+
+def main() -> None:
+    """ Function to run if this file is run as a script. """
+    service = mail.init_service()
+
+    user_parser = dict_parser(dict_parser(list_parser(str_parser)))
+    users = run_parser_file("users.json", user_parser) # type: Result[str, Users]
+
+    # without this definition mypy cannot infer the type of extract
+    def fail_mail(err: str) -> None: # pylint: disable=C0111
+        notify_failure(service, err)
+
+    users.extract(fail_mail, lambda u: respond_to_all(service, u))
+
+if __name__ == "__main__":
+    main()

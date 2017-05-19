@@ -25,7 +25,7 @@ def main() -> int:
 
     result = users.bind(
         lambda u: levels.fmap(
-            lambda l: scraper.send_messages(u, service, l))) # type: Result[str, None]
+            lambda l: scraper.send_messages(u, service, l))) # type: Result[str, None] # pylint: disable=E0602
 
     _ = result.map_err(lambda err: mail_error(service, err)) # type: Result[None, None]
     return result.extract(lambda _: 1, lambda _: 0)
