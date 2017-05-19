@@ -3,11 +3,10 @@
 import sys
 import random
 import time
-from typing import List, Dict, Callable, Iterable, Any, TypeVar
+from typing import List, Dict, Callable, Iterable, TypeVar
 
 import praw
 
-from mail import send, make_html_message
 from result import Result, Err, Ok
 from jsonparse import run_parser_file, dict_parser, str_parser
 
@@ -48,6 +47,10 @@ def group_by(iterable: Iterable[A], key_func: Callable[[A], B]) -> Dict[B, List[
             out[key] = [item]
     return out
 
+def empty(xs: Iterable[A]) -> bool:
+    """ Tests if an iterable is empty. """
+    return not bool(xs)
+
 def latest(reddit: Reddit) -> Result[str, Dict[str, Post]]:
     """ Get the latest posts """
     def get_number(post: Post) -> str: # pylint: disable=C0111
@@ -84,51 +87,3 @@ def choose_level(users: Users) -> str:
 def choose(elems: List[A]) -> A:
     """ Chooses a single element of the given list. """
     return elems[random.randrange(len(elems))]
-
-def empty(xs: Iterable[A]) -> bool:
-    """ Tests if an iterable is empty. """
-    return not bool(xs)
-
-def send_messages(users: Users, service: Any, levels: Dict[str, Post]) -> None:
-    """ Send out messages to all the users. """
-    level = choose_level(users)
-    for (address, languages) in users.items():
-        lang = None
-        if empty(languages[level]):
-            lang = "a language of your choice"
-        else:
-            lang = choose_language(address, languages[level])
-        send_message(address, service, level, lang, levels[level])
-
-def send_message(address: str, service: Any, level: str, language: str, post: Post) -> None:
-    """ Sends the user a message containing the problem in the given post. """
-    title = post.title.split(']')[-1].strip()
-    date = get_date()
-    subject = "[Weekly Programming Problem] {} in {}".format(title, language)
-    repo_url = "https://github.com/tyehle/programming-studio"
-    push_instructions = ("To push your code to the <a href={url}>studio repo</a> put "+
-                         "it in this week's folder in a folder with your name "+
-                         "(ie: {date}/tobin/*.py), or as a single file with "+
-                         "your name in it (ie: {date}/tobin_code.py)."
-                        ).format(date=date, url=repo_url)
-    message = """This week you will be doing the {level}
-                 <a href=https://www.reddit.com{link}>{title}</a> problem in
-                 {language}!<br><br>
-
-                 {repo}<br><br>
-
-                 {spec}
-                 """.format(level=level,
-                            title=title,
-                            language=language,
-                            repo=push_instructions,
-                            link=post.permalink,
-                            spec=post.selftext_html)
-    # print("Sending ({}, {}) to {}".format(level, language, address))
-    # if address == "tobinyehle@gmail.com":
-    #     print(subject)
-    #     without_newlines = message.replace("\n", "")
-    #     print(without_newlines)
-    send(service, "me", make_html_message(body=message,
-                                          subject=subject,
-                                          recipient=address))
