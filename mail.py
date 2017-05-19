@@ -14,7 +14,7 @@ from apiclient import discovery
 from oauth2client import client, tools
 from oauth2client.file import Storage
 
-from result import Result, Ok, Err
+from result import Result, Ok, Err, from_exception
 
 # If modifying these scopes, delete your previously saved credentials
 # at ~/.credentials/gmail-python.json
@@ -145,16 +145,17 @@ def quote(message: Message) -> Result[str, str]:
     if message["Date"] is None:
         return Err("Message has no Date header")
 
-    date = datetime.datetime.strptime(message["Date"], "%a, %d %b %Y %X %z")
-    date_prefix = date.strftime("%a, %b %d, %Y at %I:%M %p")
+    date_parser = from_exception(datetime.datetime.strptime, ValueError, str)
+    date = date_parser(message["Date"], "%a, %d %b %Y %X %z")
+    date_str = date.fmap(lambda d: d.strftime("%a, %b %d, %Y at %I:%M %p"))
 
     content = get_text_content(message)
 
-    def from_content(content_str: str) -> str: # pylint: disable=C0111
+    def from_content(content_str: str, date_prefix: str) -> str: # pylint: disable=C0111
         quoted = "\r\n".join("> " + line for line in content_str.split("\r\n"))
         return "On {} {} wrote:\r\n\r\n{}\r\n".format(date_prefix, message["From"], quoted)
 
-    return content.map_ok(from_content)
+    return date_str.bind(lambda d: content.fmap(lambda c: from_content(c, d))) # pylint: disable=E0602
 
 def make_reply(message: Message, body: str) -> Result[str, MIMEText]:
     """ Create a message in reply to another message. """
