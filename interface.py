@@ -82,7 +82,7 @@ def modify_user(modify: Callable[[Users, Message, str], Result[str, MIMEText]]) 
 
 def help_msg(_: Users, message: Message) -> Result[str, MIMEText]:
     """ Builds an email containing the help information. """
-    info = """This is the help message."""
+    info = """Available commands are subscribe, unsubscribe, get, set, add, remove, and help."""
     return mail.make_reply(message, info)
 
 def sub(users: Users, message: Message) -> Result[str, MIMEText]:
