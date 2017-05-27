@@ -1,5 +1,5 @@
 [MESSAGES CONTROL]
-disable=I0011, R1705
+disable=I0011, R1705, C0201
 
 [REPORTS]
 output-format=colorized

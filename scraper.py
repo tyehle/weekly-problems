@@ -22,6 +22,7 @@ Post = praw.models.reddit.submission.Submission
 Users = Dict[str, Dict[str, List[str]]]
 A = TypeVar("A")
 B = TypeVar("B")
+C = TypeVar("C")
 
 def user_agent() -> str:
     """ Build the user agent string """
@@ -53,20 +54,23 @@ def empty(xs: Iterable[A]) -> bool:
 
 def latest(reddit: Reddit) -> Result[str, Dict[str, Post]]:
     """ Get the latest posts """
-    def get_number(post: Post) -> str: # pylint: disable=C0111
-        return post.title.split()[2][1:]
+    def get_number(post: Post) -> int: # pylint: disable=C0111
+        return int(post.title.split()[2][1:])
 
-    posts = list(reddit.subreddit('dailyprogrammer').new(limit=5))
-    grouped = group_by(posts, get_number)
-    full = [posts for posts in grouped.values() if len(posts) == 3]
+    def get_title(post: Post) -> str: # pylint: disable=C0111
+        return post.title.split()[3][1:-1]
 
-    if empty(full):
-        titles = [post.title for post in posts]
-        return Err("Could not get matching challenges from: {}".format(titles))
-    else:
-        result = max(full, key=lambda posts: int(get_number(posts[0])))
-        levels = {post.title.split()[3][1:-1] : post for post in result}
-        return Ok(levels)
+    posts = list(reddit.subreddit('dailyprogrammer').new(limit=11))
+    grouped = group_by(posts, get_title)
+    out = dict() # type: Dict[str, Post]
+
+    for level in grouped.keys():
+        if empty(grouped[level]):
+            titles = [post.title for post in posts]
+            return Err("No {} challenges in: {}".format(level, titles))
+        else:
+            out[level] = max(grouped[level], key=get_number)
+    return Ok(out)
 
 def choose_language(address: str, languages: List[str]) -> str:
     """ Chooses the language for this user.
