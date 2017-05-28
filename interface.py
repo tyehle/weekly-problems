@@ -75,12 +75,13 @@ def modify_user(modify: Callable[[Users, Message, str], Result[str, MIMEText]]) 
     """ Build a function that modifies a user's data. """
     def inner(users: Users, message: Message) -> Result[str, MIMEText]:
         """ Do checks, then run the modify function. """
-        address = message["From"]
-        if address is None:
-            return Err("Message has no sender")
-        if address not in users:
-            return mail.make_reply(message, "{} is not subscribed.".format(address))
-        return modify(users, message, address)
+        def check_and_modify(address: str) -> Result[str, MIMEText]: # pylint: disable=C0111
+            if address not in users:
+                return mail.make_reply(message, "{} is not subscribed.".format(address))
+            else:
+                return modify(users, message, address)
+
+        return mail.get_address(message).bind(check_and_modify)
     return inner
 
 def help_msg(_: Users, message: Message) -> Result[str, MIMEText]:
@@ -101,23 +102,22 @@ def sub(users: Users, message: Message) -> Result[str, MIMEText]:
         If the contents fail to parse, the new user gets an empty dict,
         an error message, and the help reply.
     """
-    address = message["From"]
-    if address is None:
-        return Err("Message has no sender")
+    def with_address(address: str) -> Result[str, MIMEText]: # pylint: disable=C0111
+        if address in users:
+            return mail.make_reply(message, "{} is already subscribed.".format(address))
 
-    if address in users:
-        return mail.make_reply(message, "{} is already subscribed.".format(address))
+        data = mail.get_text_content(message).bind(parse_langs)
+        langs = init(data.extract(lambda _: dict(), lambda l: l))
+        users[address] = langs
 
-    data = mail.get_text_content(message).bind(parse_langs)
-    langs = init(data.extract(lambda _: dict(), lambda l: l))
-    users[address] = langs
+        reply = data.extract(("Could not parse json. Failed with {}. You have " +
+                              "been subscribed with no languages set.").format,
+                             lambda _: "You have been subscribed with languages " +
+                             "set to\r\n{}".format(json.dumps(langs, indent=4)))
 
-    reply = data.extract(("Could not parse json. Failed with {}. You have " +
-                          "been subscribed with no languages set.").format,
-                         lambda _: "Languages have been set to\r\n{}".format(
-                             json.dumps(langs, indent=4)))
+        return mail.make_reply(message, reply)
 
-    return mail.make_reply(message, reply)
+    return mail.get_address(message).bind(with_address)
 
 def unsub(users: Users, message: Message, address: str) -> Result[str, MIMEText]:
     """ Unsubscribe the sender of the message from the list. """

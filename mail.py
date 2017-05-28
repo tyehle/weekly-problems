@@ -89,6 +89,16 @@ def list_messages(service: Any, user_id: str, labels: str = "INBOX") -> Any:
     return service.users().messages().list(userId=user_id, labelIds=labels).execute()
 
 
+def get_address(msg: Message) -> Result[str, str]:
+    """ Extracts the addr-spec part from a mailbox. See RFC-822 for details. """
+    address = msg["From"]
+    if address is None:
+        return Err("Message has no sender")
+    if "<" in address:
+        return Ok(address[address.find("<")+1:-1])
+    else:
+        return Ok(address)
+
 def get_text_content(msg: Union[Message, MIMEText]) -> Result[str, str]:
     """ Gets the plain text content of a MIME message if it exists.
         If there is no plain text content then the result is None.
