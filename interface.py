@@ -4,6 +4,7 @@ import email
 from email.mime.text import MIMEText
 from typing import Dict, List, TypeVar, Callable, Any # pylint: disable=W0611
 import json
+import re
 
 from result import Result, Err, Ok
 import mail
@@ -23,13 +24,14 @@ LEVELS = ["Easy", "Intermediate", "Hard"]
 
 def parse_langs(raw: str) -> Result[str, Langs]:
     """ Parse some raw json into the language list. """
-    def check_keys(langs: Langs) -> Result[str, Langs]: # pylint: disable=C0111
-        for key in langs.keys():
+    def normalize_keys(langs: Langs) -> Result[str, Langs]: # pylint: disable=C0111
+        out = {key.title(): value for key, value in langs.items()}
+        for key in out.keys():
             if key not in LEVELS:
                 return Err("Not a valid level: {}".format(key))
-        return Ok(langs)
+        return Ok(out)
     langs = run_parser(raw, dict_parser(list_parser(str_parser)))
-    return langs.bind(check_keys)
+    return langs.bind(normalize_keys)
 
 def add(base: Langs, langs: Langs) -> None:
     """ Adds the languages to the given dictionary. """
@@ -59,6 +61,7 @@ def react(users: Users, message: Message) -> Result[str, MIMEText]:
         return Err("Message has no subject")
 
     commands = {"help": help_msg,
+                "?": help_msg,
                 "subscribe": sub,
                 "unsubscribe": modify_user(unsub),
                 "get": modify_user(get_langs),
@@ -66,7 +69,7 @@ def react(users: Users, message: Message) -> Result[str, MIMEText]:
                 "add": modify_user(add_langs),
                 "remove": modify_user(remove_langs)
                } # type: Dict[str, Reaction]
-    return commands.get(subject.lower(), help_msg)(users, message)
+    return commands.get(subject.lower(), unknown)(users, message)
 
 def modify_user(modify: Callable[[Users, Message, str], Result[str, MIMEText]]) -> Reaction:
     """ Build a function that modifies a user's data. """
@@ -84,6 +87,14 @@ def help_msg(_: Users, message: Message) -> Result[str, MIMEText]:
     """ Builds an email containing the help information. """
     info = """Available commands are subscribe, unsubscribe, get, set, add, remove, and help."""
     return mail.make_reply(message, info)
+
+def unknown(users: Users, message: Message) -> Result[str, MIMEText]:
+    """ Handle a message with an unknown command. """
+    subject = message["subject"]
+    if subject is not None and re.match("fu+c?k yo*u+", subject.lower()):
+        return mail.make_reply(message, "Fuck you too bitch, call the cops!")
+    else:
+        return help_msg(users, message)
 
 def sub(users: Users, message: Message) -> Result[str, MIMEText]:
     """ Subscribes the sender to the list with the contents.
