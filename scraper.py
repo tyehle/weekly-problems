@@ -54,14 +54,21 @@ def empty(xs: Iterable[A]) -> bool:
 
 def latest(reddit: Reddit) -> Result[str, Dict[str, Post]]:
     """ Get the latest posts """
-    def get_number(post: Post) -> int: # pylint: disable=C0111
+    def is_valid(post: Post) -> bool:
+        """ Checks that a post is a valid challenge post """
+        parts = post.title.split()
+        return len(parts) >= 5 and parts[1] == "Challenge"
+
+    def get_number(post: Post) -> int:
+        """ Gets the number of the challenge from the post """
         return int(post.title.split()[2][1:])
 
-    def get_title(post: Post) -> str: # pylint: disable=C0111
+    def get_level(post: Post) -> str:
+        """ Gets the level of the post """
         return post.title.split()[3][1:-1]
 
-    posts = list(reddit.subreddit('dailyprogrammer').new(limit=11))
-    grouped = group_by(posts, get_title)
+    posts = filter(is_valid, list(reddit.subreddit('dailyprogrammer').new(limit=11)))
+    grouped = group_by(posts, get_level)
     out = dict() # type: Dict[str, Post]
 
     for level in grouped.keys():
