@@ -26,7 +26,7 @@ def run_parser(raw: str, parser: "Parser[A]") -> Result[str, A]:
     try:
         data = json.loads(raw)
         return parser(data)
-    except json.decoder.JSONDecodeError as exn:
+    except ValueError as exn:
         return Err(str(exn))
 
 def dict_parser(inner: "Parser[A]") -> "Parser[Dict[str, A]]":
