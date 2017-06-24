@@ -1,2 +1,14 @@
+### Python files
+__pycache__/
 *.pyc
 *.json
+
+### Idea files
+.idea/
+
+### Mypy files
+.mypy_cache/
+
+
+### Sandbox
+test.py
