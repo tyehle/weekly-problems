@@ -2,7 +2,7 @@
 
 import json
 
-from typing import Dict, List, Callable, TypeVar, Any, cast, Tuple
+from typing import Dict, List, Optional, Callable, TypeVar, Any, cast, Tuple
 
 from result import Result, Err, Ok, map_m
 
@@ -35,14 +35,15 @@ def run_parser(raw: str, parser: "Parser[A]") -> Result[str, A]:
 
 def dict_parser(inner: "Parser[A]") -> "Parser[Dict[str, A]]":
     """ Parse a dictionary. """
-    def check_item(item: Tuple[Any, Any]) -> Result[str, A]:
-        """"""
+    def parse_item(item: Tuple[Any, Any]) -> Result[str, Tuple[str, A]]:
+        """Makes sure the key is a string, then parses the value"""
         key, value = item
-        return str_parser(key).bind(lambda _: inner(value))
+        return str_parser(key).bind(lambda k: inner(value).fmap(lambda v: (k, v)))
 
     def out(obj: Any) -> Result[str, Dict[str, A]]: # pylint: disable=missing-docstring
         if isinstance(obj, dict):
-            return map_m(check_item, obj.items()).fmap(lambda _: cast(Dict[str, A], obj))
+            pairs = map_m(parse_item, obj.items()) # type: Result[str, List[Tuple[str, A]]]
+            return pairs.fmap(lambda ps: {k: v for (k,v) in ps})
         else:
             return bad_type(dict, obj)
 
@@ -56,6 +57,25 @@ def list_parser(inner: "Parser[A]") -> "Parser[List[A]]":
             return map_m(inner, obj)
         else:
             return bad_type(list, obj)
+
+    return out
+
+
+def optional_parser(inner: "Parser[A]") -> "Parser[Optional[A]]":
+    """ Parse an optional value.
+
+    Args:
+        inner: Parser to use if the object isn't None
+    """
+    def just(obj: A) -> Optional[A]:
+        return obj
+
+    def out(obj: Any) -> Result[str, Optional[A]]:
+        if obj is None:
+            return Ok(None)
+        else:
+            return inner(obj).fmap(just)
+
     return out
 
 
@@ -89,6 +109,7 @@ def field(name: str, parser: "Parser[A]", other_fields: Callable[[A], "Parser[B]
                 return Err("Missing field {} in {}".format(name, obj))
         else:
             return bad_type(dict, obj)
+
     return out
 
 
@@ -106,6 +127,7 @@ def done(result: A) -> "Parser[A]":
     def parser(_: Any) -> Result[str, A]:
         """The constant parser"""
         return Ok(result)
+
     return parser
 
 
@@ -121,6 +143,7 @@ def leaf_parser(t: type) -> Parser:
             return Ok(obj)
         else:
             return bad_type(t, obj)
+
     return parser
 
 
