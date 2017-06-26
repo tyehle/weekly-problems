@@ -9,6 +9,7 @@ import praw
 
 from result import Result, Err, Ok
 from jsonparse import run_parser_file, dict_parser, str_parser
+from state import User
 
 VERSION = "v0.1"
 ID = "dailyprogrammer-scraper"
@@ -19,23 +20,27 @@ AUTHOR = "/u/ToboRoboLoco"
 # Yag = yagmail.SMTP
 Reddit = praw.Reddit
 Post = praw.models.reddit.submission.Submission
-Users = Dict[str, Dict[str, List[str]]]
+Users = Dict[str, User]
 A = TypeVar("A")
 B = TypeVar("B")
 C = TypeVar("C")
 
+
 def user_agent() -> str:
     """ Build the user agent string """
     return "{}:{}:{} by {}".format(sys.platform, ID, VERSION, AUTHOR)
+
 
 def init_reddit() -> Result[str, Reddit]:
     """ Gets a praw reddit instance """
     client = run_parser_file("client-info.json", dict_parser(str_parser))
     return client.fmap(lambda c: praw.Reddit(user_agent=user_agent(), **c))
 
+
 def get_date() -> str:
     """ Gets the current date in the ISO format. """
     return time.strftime("%Y-%m-%d")
+
 
 def group_by(iterable: Iterable[A], key_func: Callable[[A], B]) -> Dict[B, List[A]]:
     """ Groups an iterable by equality of keys. """
@@ -48,9 +53,11 @@ def group_by(iterable: Iterable[A], key_func: Callable[[A], B]) -> Dict[B, List[
             out[key] = [item]
     return out
 
+
 def empty(xs: Iterable[A]) -> bool:
     """ Tests if an iterable is empty. """
     return not bool(xs)
+
 
 def latest(reddit: Reddit) -> Result[str, Dict[str, Post]]:
     """ Get the latest posts """
@@ -79,6 +86,7 @@ def latest(reddit: Reddit) -> Result[str, Dict[str, Post]]:
             out[level] = max(grouped[level], key=get_number)
     return Ok(out)
 
+
 def choose_language(address: str, languages: List[str]) -> str:
     """ Chooses the language for this user.
         Uses the challenge number and email to seed the rng.
@@ -86,14 +94,16 @@ def choose_language(address: str, languages: List[str]) -> str:
     random.seed(address + get_date())
     return choose(languages)
 
+
 def choose_level(users: Users) -> str:
     """ Chooses the level for this week based on a hash of the date """
     all_levels = [level
-                  for levels in users.values()
-                  for (level, languages) in levels.items()
+                  for user in users.values()
+                  for (level, languages) in user.langs.items()
                   for _ in languages]
     random.seed(get_date())
     return choose(sorted(all_levels))
+
 
 def choose(elems: List[A]) -> A:
     """ Chooses a single element of the given list. """
