@@ -7,7 +7,7 @@ import praw
 from result import Result # pylint: disable=W0611
 import scraper
 import mail
-from state import User, load_state, save_state
+from user import User, load_users, save_users
 
 # pylint: disable=C0103
 
@@ -72,6 +72,7 @@ def send_messages(users: Users,
         lang_str = "a language of your choice" if lang is None else lang
         user.last_lang = lang
         user.vetoed = False
+        user.last_level = level
         send_message(address, service, level, lang_str, post)
 
 
@@ -135,7 +136,13 @@ def resend_cause_veto(users: Users, service: Any) -> None:
         users: The user list
         service: The mail service to use
     """
-    level = scraper.choose_level(users) # TODO: Don't send the same challenge
+    # try to get a new level
+    last_level = list(users.values())[0].last_level # any last level will do
+    for _ in range(1000):
+        level = scraper.choose_level(users)
+        if level != last_level:
+            break
+
     result = scraper.init_reddit().bind(scraper.latest).fmap(
         lambda posts: send_messages(users,
                                     service,
@@ -154,10 +161,10 @@ def main() -> int:
         """Does all the things that need the user list"""
         level = scraper.choose_level(users)
         send_messages(users, service, level, posts[level], different_lang)
-        save_state(users)
+        save_users(users)
 
     service = mail.init_service()
-    result = load_state().bind(
+    result = load_users().bind(
         lambda u: scraper.init_reddit().bind(scraper.latest).fmap(
             lambda ps: with_users_posts(u, ps))) # type: Result[str, None] # pylint: disable=undefined-variable
 

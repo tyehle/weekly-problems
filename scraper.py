@@ -9,7 +9,7 @@ import praw
 
 from result import Result, Err, Ok
 from jsonparse import run_parser_file, dict_parser, str_parser
-from state import User
+from user import User
 
 VERSION = "v0.1"
 ID = "dailyprogrammer-scraper"

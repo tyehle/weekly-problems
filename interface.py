@@ -10,7 +10,7 @@ from result import Result, Err, Ok
 import mail
 import weeklysend
 from jsonparse import run_parser, dict_parser, list_parser, str_parser
-from state import User, load_state, save_state
+from user import User, load_users, save_users
 
 Langs = Dict[str, List[str]] # pylint: disable=invalid-name
 Users = Dict[str, User] # pylint: disable=invalid-name
@@ -123,7 +123,7 @@ def sub(users: Users, message: Message) -> Result[str, MIMEText]:
             err_func=lambda _: dict(),
             ok_func=lambda l: l
         ))
-        user = User(langs, vetoed=False, last_lang=None)
+        user = User(langs, vetoed=False, last_lang=None, last_level=None)
         users[address] = user
 
         reply = data.extract(
@@ -248,7 +248,7 @@ def main() -> None:
     """ Function to run if this file is run as a script. """
     service = mail.init_service()
 
-    parsed_users = load_state()
+    parsed_users = load_users()
 
     # without this definition mypy cannot infer the type of extract
     def fail_mail(err: str) -> None: # pylint: disable=missing-docstring
@@ -257,7 +257,7 @@ def main() -> None:
     def respond_and_save(users: Users) -> None:
         """Respond to all messages, then save the user state"""
         respond_to_all(service, users)
-        save_state(users)
+        save_users(users)
 
     parsed_users.extract(err_func=fail_mail, ok_func=respond_and_save)
 
