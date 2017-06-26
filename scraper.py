@@ -87,22 +87,13 @@ def latest(reddit: Reddit) -> Result[str, Dict[str, Post]]:
     return Ok(out)
 
 
-def choose_language(address: str, languages: List[str]) -> str:
-    """ Chooses the language for this user.
-        Uses the challenge number and email to seed the rng.
-    """
-    random.seed(address + get_date())
-    return choose(languages)
-
-
 def choose_level(users: Users) -> str:
-    """ Chooses the level for this week based on a hash of the date """
+    """Chooses the level for this week based on the number of languages specified by all users"""
     all_levels = [level
                   for user in users.values()
                   for (level, languages) in user.langs.items()
                   for _ in languages]
-    random.seed(get_date())
-    return choose(sorted(all_levels))
+    return choose(all_levels)
 
 
 def choose(elems: List[A]) -> A:

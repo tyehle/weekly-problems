@@ -209,8 +209,7 @@ def veto(users: Users, message: Message, address: str) -> Result[str, MIMEText]:
     users[address].vetoed = True
     vetoes = sum(1 for user in users.values() if user.vetoed)
     if vetoes >= len(users) // 2:
-        # This week's problem has been vetoed. Send a new one.
-        weeklysend.choose_and_send(users, mail.init_service())
+        weeklysend.resend_cause_veto(users, mail.init_service())
 
     return mail.make_reply(message, "Your voice has been heard.")
 
