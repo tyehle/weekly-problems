@@ -6,6 +6,7 @@ E = TypeVar("E")
 T = TypeVar("T")
 A = TypeVar("A")
 
+
 class Result(Generic[E, T]):
     """ Result super class. Do NOT construct an instance of this by hand.
         Instead use Ok, or Err.
@@ -42,6 +43,7 @@ class Result(Generic[E, T]):
         """ Maps an ok value and leaves an err value as is. """
         return self.fmap(func)
 
+
 def from_exception(func: Callable[..., A],
                    ex: Any,
                    mapping: Callable[[Any], E]) -> Callable[..., Result[E, A]]:
@@ -55,13 +57,16 @@ def from_exception(func: Callable[..., A],
             return Err(mapping(failure))
     return inner
 
+
 def lift(func: Callable[[A], T]) -> Callable[[A], Result[E, T]]:
     """ Lift a regular function to return a result. """
     return lambda arg: Ok(func(arg))
 
+
 def pure(value: T) -> Result[E, T]:
     """ Puts a regular value into a result context. Synonym of Ok. """
     return Ok(value)
+
 
 def map_m(func: Callable[[A], Result[E, T]], items: Iterable[A]) -> Result[E, List[T]]:
     """ Iterate over some input, returning a list of good results, or the first
@@ -69,8 +74,9 @@ def map_m(func: Callable[[A], Result[E, T]], items: Iterable[A]) -> Result[E, Li
     """
     out = pure([]) # type: Result[E, List[T]]
     for item in items:
-        out = out.bind(lambda done: func(item).fmap(lambda mapped: done + [mapped]))
+        out = out.bind(lambda done: func(item).fmap(lambda mapped: done + [mapped])) # pylint: disable=undefined-variable,cell-var-from-loop
     return out
+
 
 class Ok(Result[E, T]): # pylint: disable=R0903
     """ A result representing success. """
@@ -79,6 +85,7 @@ class Ok(Result[E, T]): # pylint: disable=R0903
 
     def __repr__(self) -> str:
         return "Ok({})".format(repr(self._value))
+
 
 class Err(Result[E, T]): # pylint: disable=R0903
     """ A result representing failure. """
