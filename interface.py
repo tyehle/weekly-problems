@@ -8,6 +8,7 @@ import re
 
 from result import Result, Err, Ok
 import mail
+import weeklysend
 from jsonparse import run_parser, dict_parser, list_parser, str_parser
 from state import User, load_state, save_state
 
@@ -74,7 +75,7 @@ def react(users: Users, message: Message) -> Result[str, MIMEText]:
                 "remove": modify_user(remove_langs),
                 "veto": modify_user(veto),
                 "fuck this": modify_user(veto)
-                } # type: Dict[str, Reaction]
+               } # type: Dict[str, Reaction]
     return commands.get(subject.lower(), unknown)(users, message)
 
 
@@ -126,8 +127,11 @@ def sub(users: Users, message: Message) -> Result[str, MIMEText]:
         users[address] = user
 
         reply = data.extract(
-            err_func="Could not parse json. Failed with {}. You have been subscribed with no languages set.".format,
-            ok_func=lambda _: "You have been subscribed with languages set to\r\n{}".format(json.dumps(langs, indent=4))
+            err_func=("Could not parse json. Failed with {}. " +
+                      "You have been subscribed with no languages set.").format,
+            ok_func=lambda _: "You have been subscribed with languages set to\r\n{}".format(
+                json.dumps(langs, indent=4)
+            )
         )
 
         return mail.make_reply(message, reply)
@@ -150,14 +154,14 @@ def get_langs(users: Users, message: Message, address: str) -> Result[str, MIMET
 
 def set_langs(users: Users, message: Message, address: str) -> Result[str, MIMEText]:
     """ Set the sender's languages to the ones in the message. """
-    langs = mail.get_text_content(message).bind(parse_langs).fmap(init)
-
-    def set_and_reply(ls: Langs) -> Result[str, MIMEText]: # pylint: disable=missing-docstring
-        users[address].langs = ls
-        reply = "Languages for {} have been set to\n{}".format(address, json.dumps(ls, indent=4))
+    def set_and_reply(langs: Langs) -> Result[str, MIMEText]:
+        """Set the user's languages and build a reply email"""
+        users[address].langs = langs
+        reply = "Languages for {} have been set to\n{}".format(address, json.dumps(langs, indent=4))
         return mail.make_reply(message, reply)
 
-    return langs.extract(
+    parsed_langs = mail.get_text_content(message).bind(parse_langs).fmap(init)
+    return parsed_langs.extract(
         err_func=lambda err: mail.make_reply(message, err),
         ok_func=set_and_reply
     )
@@ -190,12 +194,23 @@ def remove_langs(users: Users, message: Message, address: str) -> Result[str, MI
 
 
 def veto(users: Users, message: Message, address: str) -> Result[str, MIMEText]:
+    """Veto this week's problem.
+
+    If half or more of the users veto the problem then send out a new problem to all users.
+
+    Args:
+        users: The state of all users
+        message: The message from the user
+        address: The address of the user
+
+    Returns:
+        An error as a string or a reply email
+    """
     users[address].vetoed = True
     vetoes = sum(1 for user in users.values() if user.vetoed)
     if vetoes >= len(users) // 2:
         # This week's problem has been vetoed. Send a new one.
-        # TODO: Implement this
-        pass
+        weeklysend.choose_and_send(users, mail.init_service())
 
     return mail.make_reply(message, "Your voice has been heard.")
 
@@ -234,17 +249,18 @@ def main() -> None:
     """ Function to run if this file is run as a script. """
     service = mail.init_service()
 
-    users = load_state()
+    parsed_users = load_state()
 
     # without this definition mypy cannot infer the type of extract
     def fail_mail(err: str) -> None: # pylint: disable=missing-docstring
         notify_failure(service, err)
 
-    def respond_and_save(u: Users) -> None:
-        respond_to_all(service, u)
-        save_state(u)
+    def respond_and_save(users: Users) -> None:
+        """Respond to all messages, then save the user state"""
+        respond_to_all(service, users)
+        save_state(users)
 
-    users.extract(err_func=fail_mail, ok_func=respond_and_save)
+    parsed_users.extract(err_func=fail_mail, ok_func=respond_and_save)
 
 if __name__ == "__main__":
     main()
