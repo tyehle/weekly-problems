@@ -2,7 +2,7 @@
 
 import json
 
-from typing import Dict, List, Optional, Callable, TypeVar, Any, cast, Tuple
+from typing import Dict, List, Optional, Callable, TypeVar, Any, Tuple
 
 from result import Result, Err, Ok, map_m
 
@@ -38,12 +38,12 @@ def dict_parser(inner: "Parser[A]") -> "Parser[Dict[str, A]]":
     def parse_item(item: Tuple[Any, Any]) -> Result[str, Tuple[str, A]]:
         """Makes sure the key is a string, then parses the value"""
         key, value = item
-        return str_parser(key).bind(lambda k: inner(value).fmap(lambda v: (k, v)))
+        return str_parser(key).bind(lambda k: inner(value).fmap(lambda v: (k, v))) # pylint: disable=undefined-variable
 
     def out(obj: Any) -> Result[str, Dict[str, A]]: # pylint: disable=missing-docstring
         if isinstance(obj, dict):
             pairs = map_m(parse_item, obj.items()) # type: Result[str, List[Tuple[str, A]]]
-            return pairs.fmap(lambda ps: {k: v for (k,v) in ps})
+            return pairs.fmap(lambda ps: {k: v for (k, v) in ps})
         else:
             return bad_type(dict, obj)
 
@@ -68,9 +68,11 @@ def optional_parser(inner: "Parser[A]") -> "Parser[Optional[A]]":
         inner: Parser to use if the object isn't None
     """
     def just(obj: A) -> Optional[A]:
+        """Pure for option"""
         return obj
 
     def out(obj: Any) -> Result[str, Optional[A]]:
+        """The parser to return"""
         if obj is None:
             return Ok(None)
         else:
@@ -82,8 +84,8 @@ def optional_parser(inner: "Parser[A]") -> "Parser[Optional[A]]":
 def field(name: str, parser: "Parser[A]", other_fields: Callable[[A], "Parser[B]"]) -> "Parser[B]":
     """Parse a field from an object.
 
-    Any other fields should be parsed using a nested lambda. When all fields have been parsed the resulting data
-    structure should be constructed using done.
+    Any other fields should be parsed using a nested lambda. When all fields have been parsed the
+    resulting data structure should be constructed using done.
 
     Example:
         >>> pair_parser = field("name", str_parser, lambda name:
@@ -116,7 +118,8 @@ def field(name: str, parser: "Parser[A]", other_fields: Callable[[A], "Parser[B]
 def done(result: A) -> "Parser[A]":
     """Finish parsing an object.
 
-    Constructs a parser that always succeeds by throwing away its argument and returning result instead.
+    Constructs a parser that always succeeds by throwing away its argument and returning result
+    instead.
 
     Args:
         result: The result of parsing
