@@ -207,10 +207,6 @@ def veto(users: Users, message: Message, address: str) -> Result[str, MIMEText]:
         An error as a string or a reply email
     """
     users[address].vetoed = True
-    vetoes = sum(1 for user in users.values() if user.vetoed)
-    if vetoes >= len(users) // 2:
-        weeklysend.resend_cause_veto(users, mail.init_service())
-
     return mail.make_reply(message, "Your voice has been heard.")
 
 
@@ -234,6 +230,10 @@ def respond_to_all(service: Any, users: Users) -> None:
             err_func=fail_mail,
             ok_func=lambda reply: reply_and_trash(msg_id, thread, reply) # pylint: disable=cell-var-from-loop
         )
+
+    vetoes = sum(1 for user in users.values() if user.vetoed)
+    if vetoes >= len(users) // 2:
+        weeklysend.resend_cause_veto(users, service)
 
 
 def notify_failure(service: Any, err: str) -> None:
