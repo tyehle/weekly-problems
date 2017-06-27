@@ -82,9 +82,9 @@ def send_message(address: str, service: Any, level: str, language: str, post: Po
     date = datetime.datetime.now().strftime("%G-W%V")
     subject = "[Weekly Programming Problem] {} in {}".format(title, language)
     repo_url = "https://github.com/tyehle/programming-studio"
-    push_instructions = ("To push your code to the <a href={url}>studio repo</a> put " +
-                         "it in this week's folder in a folder with your name " +
-                         "(ie: {date}/tobin/*.py), or as a single file with " +
+    push_instructions = ("To push your code to the <a href={url}>studio repo</a> put "
+                         "it in this week's folder in a folder with your name "
+                         "(ie: {date}/tobin/*.py), or as a single file with "
                          "your name in it (ie: {date}/tobin_code.py)."
                         ).format(date=date, url=repo_url)
     message = """This week you will be doing the {level}
@@ -136,19 +136,29 @@ def resend_cause_veto(users: Users, service: Any) -> None:
         users: The user list
         service: The mail service to use
     """
-    # try to get a new level
-    last_level = list(users.values())[0].last_level # any last level will do
-    for _ in range(1000):
-        level = scraper.choose_level(users)
-        if level != last_level:
-            break
+    def with_posts(posts: Dict[str, Post]) -> None:
+        """Code to execute given we can get a list of new posts"""
+        # try to get a new level
+        last_level = list(users.values())[0].last_level # any last level will do
+        level = "Easy" # Default to easy. This should always be changed
+        for _ in range(1000):
+            level = scraper.choose_level(users)
+            if level != last_level:
+                break
 
-    result = scraper.init_reddit().bind(scraper.latest).fmap(
-        lambda posts: send_messages(users,
-                                    service,
-                                    level,
-                                    posts[level],
-                                    same_lang)) # type: Result[str, None]
+        # notify all users of what happened
+        for address in users.keys():
+            mail.send(service, "me", mail.make_message(
+                recipient=address,
+                subject="[Weekly Programming Problem] Veto!",
+                body="The people have spoken! This week's problem sucks! "
+                     "Look for a new problem in your inbox."
+            ))
+
+        # send the new challenge
+        return send_messages(users, service, level, posts[level], same_lang)
+
+    result = scraper.init_reddit().bind(scraper.latest).fmap(with_posts)
     result.extract(
         err_func=mail_error(service),
         ok_func=lambda _: None
