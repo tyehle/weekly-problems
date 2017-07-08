@@ -232,7 +232,7 @@ def respond_to_all(service: Any, users: Users) -> None:
         )
 
     vetoes = sum(1 for user in users.values() if user.vetoed)
-    if vetoes >= len(users) // 2:
+    if vetoes >= len(users) / 2:
         weeklysend.resend_cause_veto(users, service)
 
 
